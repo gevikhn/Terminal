@@ -7,9 +7,18 @@
 
 #include <dwmapi.h>
 
+#ifdef __INSIDE_WINDOWS
+#include <dwmapip.h>
+#endif
+
 using namespace Microsoft::Console::Interactivity::Win32;
 
-#define DWMWA_USE_IMMERSIVE_DARK_MODE 19
+#define DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 19
+
+#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
+#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
+#endif
+
 #define DARK_MODE_STRING_NAME L"DarkMode_Explorer"
 #define UXTHEME_DLL_NAME L"uxtheme.dll"
 #define UXTHEME_SHOULDAPPSUSEDARKMODE_ORDINAL 132
@@ -24,15 +33,14 @@ WindowTheme::WindowTheme()
 }
 
 // Routine Description:
-// - Attempts to set the dark mode on the given HWND. 
+// - Attempts to set the dark mode on the given HWND.
 // - Will check the system for user preferences and high contrast to see if it's a good idea
 //   before setting it.
 // Arguments:
 // - hwnd - Window to apply dark mode to
 // Return Value:
 // - S_OK or suitable HRESULT from theming or DWM engines.
-[[nodiscard]]
-HRESULT WindowTheme::TrySetDarkMode(HWND hwnd) const noexcept
+[[nodiscard]] HRESULT WindowTheme::TrySetDarkMode(HWND hwnd) const noexcept
 {
     // I have to be a big B BOOL or DwnSetWindowAttribute will be upset (E_INVALIDARG) when I am passed in.
     const BOOL isDarkMode = !!_IsDarkMode();
@@ -40,12 +48,15 @@ HRESULT WindowTheme::TrySetDarkMode(HWND hwnd) const noexcept
     if (isDarkMode)
     {
         RETURN_IF_FAILED(SetWindowTheme(hwnd, DARK_MODE_STRING_NAME, nullptr));
-        RETURN_IF_FAILED(DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &isDarkMode, sizeof(isDarkMode)));
     }
     else
     {
         RETURN_IF_FAILED(SetWindowTheme(hwnd, L"", nullptr));
-        RETURN_IF_FAILED(DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &isDarkMode, sizeof(isDarkMode)));
+    }
+
+    if (FAILED(DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &isDarkMode, sizeof(isDarkMode))))
+    {
+        RETURN_IF_FAILED(DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1, &isDarkMode, sizeof(isDarkMode)));
     }
 
     return S_OK;
@@ -97,7 +108,7 @@ bool WindowTheme::_ShouldAppsUseDarkMode() const noexcept
 {
     if (_module.get() != nullptr)
     {
-        typedef bool(WINAPI *PfnShouldAppsUseDarkMode)();
+        typedef bool(WINAPI * PfnShouldAppsUseDarkMode)();
 
         static bool tried = false;
         static PfnShouldAppsUseDarkMode pfn = nullptr;

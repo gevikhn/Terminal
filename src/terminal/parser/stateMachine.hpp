@@ -151,5 +151,8 @@ namespace Microsoft::Console::VirtualTerminal
         const wchar_t* _pwchSequenceStart;
         size_t _currRunLength;
 
+        // This is tracked per state machine instance so that separate calls to Process*
+        //   can start and finish a sequence.
+        bool _fProcessingIndividually;
     };
 }

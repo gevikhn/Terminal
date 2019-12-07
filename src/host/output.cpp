@@ -15,17 +15,18 @@
 #include "../types/inc/convert.hpp"
 
 #pragma hdrstop
+
 using namespace Microsoft::Console::Types;
+using namespace Microsoft::Console::Interactivity;
 
 // This routine figures out what parameters to pass to CreateScreenBuffer based on the data from STARTUPINFO and the
 // registry defaults, and then calls CreateScreenBuffer.
-[[nodiscard]]
-NTSTATUS DoCreateScreenBuffer()
+[[nodiscard]] NTSTATUS DoCreateScreenBuffer()
 {
     CONSOLE_INFORMATION& gci = ServiceLocator::LocateGlobals().getConsoleInformation();
 
     FontInfo fiFont(gci.GetFaceName(),
-                    static_cast<BYTE>(gci.GetFontFamily()),
+                    gsl::narrow_cast<unsigned char>(gci.GetFontFamily()),
                     gci.GetFontWeight(),
                     gci.GetFontSize(),
                     gci.GetCodePage());
@@ -270,7 +271,7 @@ static void _ScrollScreen(SCREEN_INFORMATION& screenInfo, const Viewport& source
 {
     if (screenInfo.IsActiveScreenBuffer())
     {
-        IAccessibilityNotifier *pNotifier = ServiceLocator::LocateAccessibilityNotifier();
+        IAccessibilityNotifier* pNotifier = ServiceLocator::LocateAccessibilityNotifier();
         if (pNotifier != nullptr)
         {
             pNotifier->NotifyConsoleUpdateScrollEvent(target.Origin().X - source.Left(), target.Origin().Y - source.RightInclusive());
@@ -304,7 +305,7 @@ bool StreamScrollRegion(SCREEN_INFORMATION& screenInfo)
             COORD coordDelta = { 0 };
             coordDelta.Y = -1;
 
-            IAccessibilityNotifier *pNotifier = ServiceLocator::LocateAccessibilityNotifier();
+            IAccessibilityNotifier* pNotifier = ServiceLocator::LocateAccessibilityNotifier();
             if (pNotifier)
             {
                 // Notify accessibility that a scroll has occurred.
@@ -360,19 +361,6 @@ void ScrollRegion(SCREEN_INFORMATION& screenInfo,
     // If there was no clip rect, we'll clip to the entire buffer size.
     auto clip = Viewport::FromInclusive(clipRectGiven.value_or(buffer.ToInclusive()));
 
-    // Account for the scroll margins set by DECSTBM
-    // DECSTBM command can sometimes apply a clipping behavior as well. Check if we have any
-    // margins defined by DECSTBM and further restrict the clipping area here.
-    if (screenInfo.AreMarginsSet())
-    {
-        const auto margin = screenInfo.GetScrollingRegion();
-
-        // Update the clip rectangle to only include the area that is also in the margin.
-        clip = Viewport::Intersect(clip, margin);
-
-        // We'll also need to update the source rectangle, but we need to do that later.
-    }
-
     // OK, make sure that the clip rectangle also fits inside the buffer
     clip = Viewport::Intersect(buffer, clip);
 
@@ -413,18 +401,6 @@ void ScrollRegion(SCREEN_INFORMATION& screenInfo,
         auto currentSourceOrigin = source.Origin();
         targetOrigin.X += currentSourceOrigin.X - originalSourceOrigin.X;
         targetOrigin.Y += currentSourceOrigin.Y - originalSourceOrigin.Y;
-    }
-
-    // See MSFT:20204600 - Update the source rectangle to only include the region
-    //      inside the scroll margins. We need to do this AFTER we calculate the
-    //      delta between the currentSourceOrigin and the originalSourceOrigin.
-    // Don't combine this with the above block, because if there are margins set
-    //      and the source rectangle was clipped by the buffer, we still want to
-    //      adjust the target origin point based on the clipping of the buffer.
-    if (screenInfo.AreMarginsSet())
-    {
-        const auto margin = screenInfo.GetScrollingRegion();
-        source = Viewport::Intersect(source, margin);
     }
 
     // And now the target viewport is the same size as the source viewport but at the different position.

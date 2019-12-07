@@ -5,32 +5,13 @@
 #include "EchoConnection.h"
 #include <sstream>
 
+#include "EchoConnection.g.cpp"
+
 namespace winrt::Microsoft::Terminal::TerminalConnection::implementation
 {
     EchoConnection::EchoConnection()
     {
     }
-
-    winrt::event_token EchoConnection::TerminalOutput(TerminalConnection::TerminalOutputEventArgs const& handler)
-    {
-        return _outputHandlers.add(handler);
-    }
-
-    void EchoConnection::TerminalOutput(winrt::event_token const& token) noexcept
-    {
-        _outputHandlers.remove(token);
-    }
-
-    winrt::event_token EchoConnection::TerminalDisconnected(TerminalConnection::TerminalDisconnectedEventArgs const& handler)
-    {
-        handler;
-        throw hresult_not_implemented();
-    }
-
-    void EchoConnection::TerminalDisconnected(winrt::event_token const& token) noexcept
-    {
-        token;
-     }
 
     void EchoConnection::Start()
     {
@@ -43,7 +24,7 @@ namespace winrt::Microsoft::Terminal::TerminalConnection::implementation
         {
             if (wch < 0x20)
             {
-                prettyPrint << L"^" << (wchar_t)(wch+0x40);
+                prettyPrint << L"^" << (wchar_t)(wch + 0x40);
             }
             else if (wch == 0x7f)
             {
@@ -54,19 +35,16 @@ namespace winrt::Microsoft::Terminal::TerminalConnection::implementation
                 prettyPrint << wch;
             }
         }
-        _outputHandlers(prettyPrint.str());
+        _TerminalOutputHandlers(prettyPrint.str());
     }
 
     void EchoConnection::Resize(uint32_t rows, uint32_t columns)
     {
         rows;
         columns;
-
-        throw hresult_not_implemented();
     }
 
     void EchoConnection::Close()
     {
-        throw hresult_not_implemented();
     }
 }
