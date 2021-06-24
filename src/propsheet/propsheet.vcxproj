@@ -23,7 +23,7 @@
     <ClCompile Include="LayoutPage.cpp" />
     <ClCompile Include="ColorsPage.cpp" />
     <ClCompile Include="ColorControl.cpp" />
-    <ClCompile Include="TerminalPage.cpp" />
+    <ClCompile Include="TerminalPropsheetPage.cpp" />
     <ClCompile Include="registry.cpp" />
     <ClCompile Include="util.cpp" />
     <ClCompile Include="precomp.cpp">
@@ -41,7 +41,7 @@
     <ClInclude Include="LayoutPage.h" />
     <ClInclude Include="ColorsPage.h" />
     <ClInclude Include="ColorControl.h" />
-    <ClInclude Include="TerminalPage.h" />
+    <ClInclude Include="TerminalPropsheetPage.h" />
     <ClInclude Include="menu.h" />
     <ClInclude Include="precomp.h" />
   </ItemGroup>
@@ -52,6 +52,9 @@
   <ItemGroup>
     <ProjectReference Include="..\propslib\propslib.vcxproj">
       <Project>{345fd5a4-b32b-4f29-bd1c-b033bd2c35cc}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\internal\internal.vcxproj">
+      <Project>{EF3E32A7-5FF6-42B4-B6E2-96CD7D033F00}</Project>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>

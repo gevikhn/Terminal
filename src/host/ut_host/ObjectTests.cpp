@@ -3,7 +3,7 @@
 
 #include "precomp.h"
 #include "WexTestClass.h"
-#include "..\..\inc\consoletaeftemplates.hpp"
+#include "../../inc/consoletaeftemplates.hpp"
 
 #include "CommonState.hpp"
 
@@ -63,7 +63,7 @@ class ObjectTests
                                                              existingOutput.GetCurrentFont(),
                                                              existingOutput.GetBufferSize().Dimensions(),
                                                              existingOutput.GetAttributes(),
-                                                             *existingOutput.GetPopupAttributes(),
+                                                             existingOutput.GetPopupAttributes(),
                                                              existingOutput.GetTextBuffer().GetCursor().GetSize(),
                                                              &newOutput));
 

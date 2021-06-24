@@ -3,6 +3,8 @@
 
 #pragma once
 
+#define NOMINMAX
+
 #include <nt.h>
 #include <ntrtl.h>
 #include <nturtl.h>
@@ -13,4 +15,4 @@
 #include <sysparamsext.h>
 
 #define _DDK_INCLUDED
-#include "..\..\host\precomp.h"
+#include "../../host/precomp.h"

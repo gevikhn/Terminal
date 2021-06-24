@@ -152,7 +152,7 @@ private:
     // Index for the currently connected process.
     size_t _iProcessConnectedCurrently;
     // An array of indexes into the _wchProcessFileNames array, which point to the individual process names.
-    size_t _rgiProccessFileNameIndex[c_iMaxProcessesConnected];
+    size_t _rgiProcessFileNameIndex[c_iMaxProcessesConnected];
     // Number of times each process has connected to the console.
     unsigned int _rguiProcessFileNamesCount[c_iMaxProcessesConnected];
     // To speed up searching the Process Names, create an alphabetically sorted index.
@@ -189,7 +189,7 @@ private:
 };
 
 // Log the RIPMSG through telemetry, and also through a normal OutputDebugStringW call.
-// These are drop-in substitutes for the RIPMSG0-4 macros from \windows\Core\ntcon2\conhost\consrv.h
+// These are drop-in substitutes for the RIPMSG0-4 macros from /windows/Core/ntcon2/conhost/consrv.h
 #define RIPMSG0(flags, msg) Telemetry::Instance().LogRipMessage(msg);
 #define RIPMSG1(flags, msg, a) Telemetry::Instance().LogRipMessage(msg, a);
 #define RIPMSG2(flags, msg, a, b) Telemetry::Instance().LogRipMessage(msg, a, b);

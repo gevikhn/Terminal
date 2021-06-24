@@ -48,8 +48,7 @@ namespace Microsoft::Console::Render
 
         virtual const TextAttribute GetDefaultBrushColors() noexcept = 0;
 
-        virtual const COLORREF GetForegroundColor(const TextAttribute& attr) const noexcept = 0;
-        virtual const COLORREF GetBackgroundColor(const TextAttribute& attr) const noexcept = 0;
+        virtual std::pair<COLORREF, COLORREF> GetAttributeColors(const TextAttribute& attr) const noexcept = 0;
 
         virtual COORD GetCursorPosition() const noexcept = 0;
         virtual bool IsCursorVisible() const noexcept = 0;
@@ -58,12 +57,19 @@ namespace Microsoft::Console::Render
         virtual CursorType GetCursorStyle() const noexcept = 0;
         virtual ULONG GetCursorPixelWidth() const noexcept = 0;
         virtual COLORREF GetCursorColor() const noexcept = 0;
-        virtual bool IsCursorDoubleWidth() const noexcept = 0;
+        virtual bool IsCursorDoubleWidth() const = 0;
+
+        virtual bool IsScreenReversed() const noexcept = 0;
 
         virtual const std::vector<RenderOverlay> GetOverlays() const noexcept = 0;
 
         virtual const bool IsGridLineDrawingAllowed() noexcept = 0;
-        virtual const std::wstring GetConsoleTitle() const noexcept = 0;
+        virtual const std::wstring_view GetConsoleTitle() const noexcept = 0;
+
+        virtual const std::wstring GetHyperlinkUri(uint16_t id) const noexcept = 0;
+        virtual const std::wstring GetHyperlinkCustomId(uint16_t id) const noexcept = 0;
+
+        virtual const std::vector<size_t> GetPatternId(const COORD location) const noexcept = 0;
 
     protected:
         IRenderData() = default;

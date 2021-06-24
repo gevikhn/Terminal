@@ -19,19 +19,22 @@ Author(s):
 
 #pragma once
 
-#include "precomp.h"
-#include "..\types\ScreenInfoUiaProviderBase.h"
-#include "..\types\UiaTextRangeBase.hpp"
+#include <UIAutomationCore.h>
+
+#include "../types/ScreenInfoUiaProviderBase.h"
+#include "../types/UiaTextRangeBase.hpp"
 #include "uiaTextRange.hpp"
 
 namespace Microsoft::Console::Interactivity::Win32
 {
+    class WindowUiaProvider;
+
     class ScreenInfoUiaProvider final : public Microsoft::Console::Types::ScreenInfoUiaProviderBase
     {
     public:
         ScreenInfoUiaProvider() = default;
         HRESULT RuntimeClassInitialize(_In_ Microsoft::Console::Types::IUiaData* pData,
-                                       _In_ Microsoft::Console::Types::WindowUiaProviderBase* const pUiaParent);
+                                       _In_ WindowUiaProvider* const pUiaParent);
 
         // IRawElementProviderFragment methods
         IFACEMETHODIMP Navigate(_In_ NavigateDirection direction,
@@ -40,33 +43,35 @@ namespace Microsoft::Console::Interactivity::Win32
         IFACEMETHODIMP get_FragmentRoot(_COM_Outptr_result_maybenull_ IRawElementProviderFragmentRoot** ppProvider) override;
 
         HWND GetWindowHandle() const;
-        void ChangeViewport(const SMALL_RECT NewWindow);
+        void ChangeViewport(const SMALL_RECT NewWindow) override;
 
     protected:
-        HRESULT GetSelectionRanges(_In_ IRawElementProviderSimple* pProvider, _Out_ std::deque<WRL::ComPtr<Microsoft::Console::Types::UiaTextRangeBase>>& selectionRanges) override;
+        HRESULT GetSelectionRange(_In_ IRawElementProviderSimple* pProvider, const std::wstring_view wordDelimiters, _COM_Outptr_result_maybenull_ Microsoft::Console::Types::UiaTextRangeBase** ppUtr) override;
 
         // degenerate range
-        HRESULT CreateTextRange(_In_ IRawElementProviderSimple* const pProvider, _COM_Outptr_result_maybenull_ Microsoft::Console::Types::UiaTextRangeBase** ppUtr) override;
+        HRESULT CreateTextRange(_In_ IRawElementProviderSimple* const pProvider, const std::wstring_view wordDelimiters, _COM_Outptr_result_maybenull_ Microsoft::Console::Types::UiaTextRangeBase** ppUtr) override;
 
         // degenerate range at cursor position
         HRESULT CreateTextRange(_In_ IRawElementProviderSimple* const pProvider,
                                 const Cursor& cursor,
+                                const std::wstring_view wordDelimiters,
                                 _COM_Outptr_result_maybenull_ Microsoft::Console::Types::UiaTextRangeBase** ppUtr) override;
 
         // specific endpoint range
         HRESULT CreateTextRange(_In_ IRawElementProviderSimple* const pProvider,
-                                const Endpoint start,
-                                const Endpoint end,
-                                const bool degenerate,
+                                const COORD start,
+                                const COORD end,
+                                const std::wstring_view wordDelimiters,
                                 _COM_Outptr_result_maybenull_ Microsoft::Console::Types::UiaTextRangeBase** ppUtr) override;
 
         // range from a UiaPoint
         HRESULT CreateTextRange(_In_ IRawElementProviderSimple* const pProvider,
                                 const UiaPoint point,
+                                const std::wstring_view wordDelimiters,
                                 _COM_Outptr_result_maybenull_ Microsoft::Console::Types::UiaTextRangeBase** ppUtr) override;
 
     private:
         // weak reference to uia parent
-        Microsoft::Console::Types::WindowUiaProviderBase* _pUiaParent;
+        WindowUiaProvider* _pUiaParent;
     };
 }

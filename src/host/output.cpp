@@ -41,7 +41,7 @@ using namespace Microsoft::Console::Interactivity;
     NTSTATUS Status = SCREEN_INFORMATION::CreateInstance(gci.GetWindowSize(),
                                                          fiFont,
                                                          gci.GetScreenBufferSize(),
-                                                         gci.GetDefaultAttributes(),
+                                                         TextAttribute{},
                                                          TextAttribute{ gci.GetPopupFillAttribute() },
                                                          gci.GetCursorSize(),
                                                          &gci.ScreenBuffers);
@@ -148,16 +148,18 @@ std::vector<WORD> ReadOutputAttributes(const SCREEN_INFORMATION& screenInfo,
     // While we haven't read enough cells yet and the iterator is still valid (hasn't reached end of buffer)
     while (amountRead < amountToRead && it)
     {
+        const auto legacyAttributes = it->TextAttr().GetLegacyAttributes();
+
         // If the first thing we read is trailing, pad with a space.
         // OR If the last thing we read is leading, pad with a space.
         if ((amountRead == 0 && it->DbcsAttr().IsTrailing()) ||
             (amountRead == (amountToRead - 1) && it->DbcsAttr().IsLeading()))
         {
-            retVal.push_back(it->TextAttr().GetLegacyAttributes());
+            retVal.push_back(legacyAttributes);
         }
         else
         {
-            retVal.push_back(it->TextAttr().GetLegacyAttributes() | it->DbcsAttr().GeneratePublicApiAttributeFormat());
+            retVal.push_back(legacyAttributes | it->DbcsAttr().GeneratePublicApiAttributeFormat());
         }
 
         amountRead++;
@@ -296,7 +298,8 @@ static void _ScrollScreen(SCREEN_INFORMATION& screenInfo, const Viewport& source
 bool StreamScrollRegion(SCREEN_INFORMATION& screenInfo)
 {
     // Rotate the circular buffer around and wipe out the previous final line.
-    bool fSuccess = screenInfo.GetTextBuffer().IncrementCircularBuffer();
+    const bool inVtMode = WI_IsFlagSet(screenInfo.OutputMode, ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+    bool fSuccess = screenInfo.GetTextBuffer().IncrementCircularBuffer(inVtMode);
     if (fSuccess)
     {
         // Trigger a graphical update if we're active.
@@ -383,7 +386,7 @@ void ScrollRegion(SCREEN_INFORMATION& screenInfo,
 
     // However, if the character is null and we were given a null attribute (represented as legacy 0),
     // then we'll just fill with spaces and whatever the buffer's default colors are.
-    if (fillCharGiven == UNICODE_NULL && fillAttrsGiven.IsLegacy() && fillAttrsGiven.GetLegacyAttributes() == 0)
+    if (fillCharGiven == UNICODE_NULL && fillAttrsGiven == TextAttribute{ 0 })
     {
         fillData = OutputCellIterator(UNICODE_SPACE, screenInfo.GetAttributes());
     }
@@ -448,6 +451,13 @@ void ScrollRegion(SCREEN_INFORMATION& screenInfo,
     {
         const auto& view = remaining.at(i);
         screenInfo.WriteRect(fillData, view);
+
+        // If we're scrolling an area that encompasses the full buffer width,
+        // then the filled rows should also have their line rendition reset.
+        if (view.Width() == buffer.Width() && destinationOriginGiven.X == 0)
+        {
+            screenInfo.GetTextBuffer().ResetLineRenditionRange(view.Top(), view.BottomExclusive());
+        }
     }
 }
 
@@ -456,8 +466,20 @@ void SetActiveScreenBuffer(SCREEN_INFORMATION& screenInfo)
     CONSOLE_INFORMATION& gci = ServiceLocator::LocateGlobals().getConsoleInformation();
     gci.pCurrentScreenBuffer = &screenInfo;
 
-    // initialize cursor
-    screenInfo.GetTextBuffer().GetCursor().SetIsOn(false);
+    // initialize cursor GH#4102 - Typically, the cursor is set to on by the
+    // cursor blinker. Unfortunately, in conpty mode, there is no cursor
+    // blinker. So, in conpty mode, we need to leave the cursor on always. The
+    // cursor can still be set to hidden, and whether the cursor should be
+    // blinking will still be passed through to the terminal, but internally,
+    // the cursor should always be on.
+    //
+    // In particular, some applications make use of a calling
+    // `SetConsoleScreenBuffer` and `SetCursorPosition` without printing any
+    // text in between these calls. If we initialize the cursor to Off in conpty
+    // mode, then the cursor will remain off until they print text. This can
+    // lead to alignment problems in the terminal, because we won't move the
+    // terminal's cursor in this _exact_ scenario.
+    screenInfo.GetTextBuffer().GetCursor().SetIsOn(gci.IsInVtIoMode());
 
     // set font
     screenInfo.RefreshFontWithRenderer();
@@ -493,7 +515,7 @@ void CloseConsoleProcessState()
     // Jiggle the handle: (see MSFT:19419231)
     // When we call this function, we'll only actually close the console once
     //      we're totally unlocked. If our caller has the console locked, great,
-    //      we'll displatch the ctrl event once they unlock. However, if they're
+    //      we'll dispatch the ctrl event once they unlock. However, if they're
     //      not running under lock (eg PtySignalInputThread::_GetData), then the
     //      ctrl event will never actually get dispatched.
     // So, lock and unlock here, to make sure the ctrl event gets handled.

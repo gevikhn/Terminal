@@ -15,13 +15,13 @@
 #include "..\onecore\WindowMetrics.hpp"
 #endif
 
-#include "..\win32\AccessibilityNotifier.hpp"
-#include "..\win32\ConsoleControl.hpp"
-#include "..\win32\ConsoleInputThread.hpp"
-#include "..\win32\InputServices.hpp"
-#include "..\win32\WindowDpiApi.hpp"
-#include "..\win32\WindowMetrics.hpp"
-#include "..\win32\SystemConfigurationProvider.hpp"
+#include "../win32/AccessibilityNotifier.hpp"
+#include "../win32/ConsoleControl.hpp"
+#include "../win32/ConsoleInputThread.hpp"
+#include "../win32/InputServices.hpp"
+#include "../win32/WindowDpiApi.hpp"
+#include "../win32/WindowMetrics.hpp"
+#include "../win32/SystemConfigurationProvider.hpp"
 
 #pragma hdrstop
 
@@ -336,7 +336,7 @@ using namespace Microsoft::Console::Interactivity;
 // - STATUS_SUCCESS on success, otherwise an appropriate error.
 [[nodiscard]] NTSTATUS InteractivityFactory::CreatePseudoWindow(HWND& hwnd)
 {
-    hwnd = 0;
+    hwnd = nullptr;
     ApiLevel level;
     NTSTATUS status = ApiDetector::DetectNtUserWindow(&level);
     ;

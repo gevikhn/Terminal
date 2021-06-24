@@ -3,18 +3,22 @@
 
 #include "precomp.h"
 
-#include "../TerminalApp/ColorScheme.h"
-#include "../TerminalApp/Profile.h"
+#include "../TerminalSettingsModel/ColorScheme.h"
+#include "../TerminalSettingsModel/Profile.h"
+#include "../TerminalSettingsModel/CascadiaSettings.h"
+#include "../LocalTests_SettingsModel/JsonTestClass.h"
+#include "../types/inc/colorTable.hpp"
 
 using namespace Microsoft::Console;
-using namespace TerminalApp;
 using namespace WEX::Logging;
 using namespace WEX::TestExecution;
 using namespace WEX::Common;
+using namespace winrt::Microsoft::Terminal::Settings::Model;
+using namespace winrt::Microsoft::Terminal::Control;
 
 namespace TerminalAppUnitTests
 {
-    class JsonTests
+    class JsonTests : public JsonTestClass
     {
         BEGIN_TEST_CLASS(JsonTests)
             TEST_CLASS_PROPERTY(L"ActivationContext", L"TerminalApp.Unit.Tests.manifest")
@@ -23,13 +27,10 @@ namespace TerminalAppUnitTests
         TEST_METHOD(ParseInvalidJson);
         TEST_METHOD(ParseSimpleColorScheme);
         TEST_METHOD(ProfileGeneratesGuid);
-        TEST_METHOD(DiffProfile);
-        TEST_METHOD(DiffProfileWithNull);
 
         TEST_CLASS_SETUP(ClassSetup)
         {
-            reader = std::unique_ptr<Json::CharReader>(Json::CharReaderBuilder::CharReaderBuilder().newCharReader());
-
+            InitializeJsonReader();
             // Use 4 spaces to indent instead of \t
             _builder.settings_["indentation"] = "    ";
             return true;
@@ -39,7 +40,6 @@ namespace TerminalAppUnitTests
         void VerifyParseFailed(std::string content);
 
     private:
-        std::unique_ptr<Json::CharReader> reader;
         Json::StreamWriterBuilder _builder;
     };
 
@@ -47,7 +47,7 @@ namespace TerminalAppUnitTests
     {
         Json::Value root;
         std::string errs;
-        const bool parseResult = reader->parse(content.c_str(), content.c_str() + content.size(), &root, &errs);
+        const bool parseResult = _reader->parse(content.c_str(), content.c_str() + content.size(), &root, &errs);
         VERIFY_IS_TRUE(parseResult, winrt::to_hstring(errs).c_str());
         return root;
     }
@@ -55,7 +55,7 @@ namespace TerminalAppUnitTests
     {
         Json::Value root;
         std::string errs;
-        const bool parseResult = reader->parse(content.c_str(), content.c_str() + content.size(), &root, &errs);
+        const bool parseResult = _reader->parse(content.c_str(), content.c_str() + content.size(), &root, &errs);
         VERIFY_IS_FALSE(parseResult);
     }
 
@@ -79,6 +79,7 @@ namespace TerminalAppUnitTests
                                           "\"brightRed\" : \"#E74856\","
                                           "\"brightWhite\" : \"#F2F2F2\","
                                           "\"brightYellow\" : \"#F9F1A5\","
+                                          "\"cursorColor\" : \"#FFFFFF\","
                                           "\"cyan\" : \"#3A96DD\","
                                           "\"foreground\" : \"#F2F2F2\","
                                           "\"green\" : \"#13A10E\","
@@ -86,35 +87,40 @@ namespace TerminalAppUnitTests
                                           "\"purple\" : \"#881798\","
                                           "\"red\" : \"#C50F1F\","
                                           "\"selectionBackground\" : \"#131313\","
-                                          "\"white\" : \"#CCC\","
+                                          "\"white\" : \"#CCCCCC\","
                                           "\"yellow\" : \"#C19C00\""
                                           "}" };
 
         const auto schemeObject = VerifyParseSucceeded(campbellScheme);
-        auto scheme = ColorScheme::FromJson(schemeObject);
-        VERIFY_ARE_EQUAL(L"Campbell", scheme.GetName());
-        VERIFY_ARE_EQUAL(ARGB(0, 0xf2, 0xf2, 0xf2), scheme.GetForeground());
-        VERIFY_ARE_EQUAL(ARGB(0, 0x0c, 0x0c, 0x0c), scheme.GetBackground());
-        VERIFY_ARE_EQUAL(ARGB(0, 0x13, 0x13, 0x13), scheme.GetSelectionBackground());
+        auto scheme = implementation::ColorScheme::FromJson(schemeObject);
+        VERIFY_ARE_EQUAL(L"Campbell", scheme->Name());
+        VERIFY_ARE_EQUAL(til::color(0xf2, 0xf2, 0xf2, 255), til::color{ scheme->Foreground() });
+        VERIFY_ARE_EQUAL(til::color(0x0c, 0x0c, 0x0c, 255), til::color{ scheme->Background() });
+        VERIFY_ARE_EQUAL(til::color(0x13, 0x13, 0x13, 255), til::color{ scheme->SelectionBackground() });
+        VERIFY_ARE_EQUAL(til::color(0xFF, 0xFF, 0xFF, 255), til::color{ scheme->CursorColor() });
 
         std::array<COLORREF, COLOR_TABLE_SIZE> expectedCampbellTable;
-        auto campbellSpan = gsl::span<COLORREF>(&expectedCampbellTable[0], gsl::narrow<ptrdiff_t>(COLOR_TABLE_SIZE));
+        auto campbellSpan = gsl::span<COLORREF>(&expectedCampbellTable[0], COLOR_TABLE_SIZE);
         Utils::InitializeCampbellColorTable(campbellSpan);
         Utils::SetColorTableAlpha(campbellSpan, 0);
 
         for (size_t i = 0; i < expectedCampbellTable.size(); i++)
         {
             const auto& expected = expectedCampbellTable.at(i);
-            const auto& actual = scheme.GetTable().at(i);
+            const til::color actual{ scheme->Table().at(static_cast<uint32_t>(i)) };
             VERIFY_ARE_EQUAL(expected, actual);
         }
+
+        Log::Comment(L"Roundtrip Test for Color Scheme");
+        Json::Value outJson{ scheme->ToJson() };
+        VERIFY_ARE_EQUAL(schemeObject, outJson);
     }
 
     void JsonTests::ProfileGeneratesGuid()
     {
         // Parse some profiles without guids. We should NOT generate new guids
         // for them. If a profile doesn't have a GUID, we'll leave its _guid
-        // set to nullopt. CascadiaSettings::_ValidateProfilesHaveGuid will
+        // set to nullopt. The Profile::Guid() getter will
         // ensure all profiles have a GUID that's actually set.
         // The null guid _is_ a valid guid, so we won't re-generate that
         // guid. null is _not_ a valid guid, so we'll leave that nullopt
@@ -148,75 +154,21 @@ namespace TerminalAppUnitTests
         const auto profile3Json = VerifyParseSucceeded(profileWithNullGuid);
         const auto profile4Json = VerifyParseSucceeded(profileWithGuid);
 
-        const auto profile0 = Profile::FromJson(profile0Json);
-        const auto profile1 = Profile::FromJson(profile1Json);
-        const auto profile2 = Profile::FromJson(profile2Json);
-        const auto profile3 = Profile::FromJson(profile3Json);
-        const auto profile4 = Profile::FromJson(profile4Json);
-        const GUID cmdGuid = Utils::GuidFromString(L"{6239a42c-1de4-49a3-80bd-e8fdd045185c}");
-        const GUID nullGuid{ 0 };
+        const auto profile0 = implementation::Profile::FromJson(profile0Json);
+        const auto profile1 = implementation::Profile::FromJson(profile1Json);
+        const auto profile2 = implementation::Profile::FromJson(profile2Json);
+        const auto profile3 = implementation::Profile::FromJson(profile3Json);
+        const auto profile4 = implementation::Profile::FromJson(profile4Json);
+        const winrt::guid cmdGuid = Utils::GuidFromString(L"{6239a42c-1de4-49a3-80bd-e8fdd045185c}");
+        const winrt::guid nullGuid{};
 
-        VERIFY_IS_FALSE(profile0._guid.has_value());
-        VERIFY_IS_FALSE(profile1._guid.has_value());
-        VERIFY_IS_FALSE(profile2._guid.has_value());
-        VERIFY_IS_TRUE(profile3._guid.has_value());
-        VERIFY_IS_TRUE(profile4._guid.has_value());
+        VERIFY_IS_FALSE(profile0->HasGuid());
+        VERIFY_IS_FALSE(profile1->HasGuid());
+        VERIFY_IS_FALSE(profile2->HasGuid());
+        VERIFY_IS_TRUE(profile3->HasGuid());
+        VERIFY_IS_TRUE(profile4->HasGuid());
 
-        VERIFY_ARE_EQUAL(profile3.GetGuid(), nullGuid);
-        VERIFY_ARE_EQUAL(profile4.GetGuid(), cmdGuid);
+        VERIFY_ARE_EQUAL(profile3->Guid(), nullGuid);
+        VERIFY_ARE_EQUAL(profile4->Guid(), cmdGuid);
     }
-
-    void JsonTests::DiffProfile()
-    {
-        Profile profile0;
-        Profile profile1;
-
-        Log::Comment(NoThrowString().Format(
-            L"Both these profiles are the same, their diff should have _no_ values"));
-
-        auto diff = profile1.DiffToJson(profile0);
-
-        Log::Comment(NoThrowString().Format(L"diff:%hs", Json::writeString(_builder, diff).c_str()));
-
-        VERIFY_ARE_EQUAL(0u, diff.getMemberNames().size());
-
-        profile1._name = L"profile1";
-        diff = profile1.DiffToJson(profile0);
-        Log::Comment(NoThrowString().Format(L"diff:%hs", Json::writeString(_builder, diff).c_str()));
-        VERIFY_ARE_EQUAL(1u, diff.getMemberNames().size());
-    }
-
-    void JsonTests::DiffProfileWithNull()
-    {
-        Profile profile0;
-        Profile profile1;
-
-        profile0._icon = L"foo";
-
-        Log::Comment(NoThrowString().Format(
-            L"Case 1: Base object has an optional that the derived does not - diff will have null for that value"));
-        auto diff = profile1.DiffToJson(profile0);
-
-        Log::Comment(NoThrowString().Format(L"diff:%hs", Json::writeString(_builder, diff).c_str()));
-
-        VERIFY_ARE_EQUAL(1u, diff.getMemberNames().size());
-        VERIFY_IS_TRUE(diff.isMember("icon"));
-        VERIFY_IS_TRUE(diff["icon"].isNull());
-
-        Log::Comment(NoThrowString().Format(
-            L"Case 2: Add an optional to the derived object that's not present in the root."));
-
-        profile0._icon = std::nullopt;
-        profile1._icon = L"bar";
-
-        diff = profile1.DiffToJson(profile0);
-
-        Log::Comment(NoThrowString().Format(L"diff:%hs", Json::writeString(_builder, diff).c_str()));
-
-        VERIFY_ARE_EQUAL(1u, diff.getMemberNames().size());
-        VERIFY_IS_TRUE(diff.isMember("icon"));
-        VERIFY_IS_TRUE(diff["icon"].isString());
-        VERIFY_IS_TRUE("bar" == diff["icon"].asString());
-    }
-
 }

@@ -13,22 +13,23 @@
 #include "windowio.hpp"
 #include "windowmetrics.hpp"
 
-#include "..\..\host\_output.h"
-#include "..\..\host\output.h"
-#include "..\..\host\dbcs.h"
-#include "..\..\host\handle.h"
-#include "..\..\host\input.h"
-#include "..\..\host\misc.h"
-#include "..\..\host\registry.hpp"
-#include "..\..\host\scrolling.hpp"
-#include "..\..\host\srvinit.h"
+#include "../../host/_output.h"
+#include "../../host/output.h"
+#include "../../host/dbcs.h"
+#include "../../host/handle.h"
+#include "../../host/input.h"
+#include "../../host/misc.h"
+#include "../../host/registry.hpp"
+#include "../../host/scrolling.hpp"
+#include "../../host/srvinit.h"
 
-#include "..\inc\ServiceLocator.hpp"
+#include "../inc/ServiceLocator.hpp"
 
-#include "..\interactivity\win32\windowtheme.hpp"
-#include "..\interactivity\win32\CustomWindowMessages.h"
+#include "../../inc/conint.h"
 
-#include "..\interactivity\win32\windowUiaProvider.hpp"
+#include "../interactivity/win32/CustomWindowMessages.h"
+
+#include "../interactivity/win32/windowUiaProvider.hpp"
 
 #include <iomanip>
 #include <sstream>
@@ -100,7 +101,7 @@ using namespace Microsoft::Console::Types;
 
         // First get the new DPI and update all the scaling factors in the console that are affected.
 
-        // NOTE: GetWindowDpi and/or GetDpiForWindow can be *WRONG* at this point in time depending on monitor configuration.
+        // NOTE: GetDpiForWindow can be *WRONG* at this point in time depending on monitor configuration.
         //       They won't be correct until the window is actually shown. So instead of using those APIs, figure out the DPI
         //       based on the rectangle that is about to be shown using the nearest monitor.
 
@@ -112,7 +113,7 @@ using namespace Microsoft::Console::Types;
         rc.right = rc.left + pcs->cx;
         rc.bottom = rc.top + pcs->cy;
 
-        // Find nearest montitor.
+        // Find nearest monitor.
         HMONITOR hmon = MonitorFromRect(&rc, MONITOR_DEFAULTTONEAREST);
 
         // This API guarantees that dpix and dpiy will be equal, but neither is an optional parameter so give two UINTs.
@@ -130,7 +131,7 @@ using namespace Microsoft::Console::Types;
         RECT rectProposed = { rc.left, rc.top, 0, 0 };
         _CalculateWindowRect(_pSettings->GetWindowSize(), &rectProposed);
 
-        SetWindowPos(hWnd, NULL, rectProposed.left, rectProposed.top, RECT_WIDTH(&rectProposed), RECT_HEIGHT(&rectProposed), SWP_NOACTIVATE | SWP_NOZORDER);
+        SetWindowPos(hWnd, nullptr, rectProposed.left, rectProposed.top, RECT_WIDTH(&rectProposed), RECT_HEIGHT(&rectProposed), SWP_NOACTIVATE | SWP_NOZORDER);
 
         // Save the proposed window rect dimensions here so we can adjust if the system comes back and changes them on what we asked for.
         ServiceLocator::LocateWindowMetrics<WindowMetrics>()->ConvertWindowRectToClientRect(&rectProposed);
@@ -155,7 +156,7 @@ using namespace Microsoft::Console::Types;
         // signal to uia that they can disconnect our uia provider
         if (_pUiaProvider)
         {
-            UiaReturnRawElementProvider(hWnd, 0, 0, NULL);
+            UiaReturnRawElementProvider(hWnd, 0, 0, nullptr);
         }
         break;
     }
@@ -185,7 +186,7 @@ using namespace Microsoft::Console::Types;
         // Now we need to get what the font size *would be* if we had this new DPI. We need to ask the renderer about that.
         const FontInfo& fiCurrent = ScreenInfo.GetCurrentFont();
         FontInfoDesired fiDesired(fiCurrent);
-        FontInfo fiProposed(nullptr, 0, 0, { 0, 0 }, 0);
+        FontInfo fiProposed(L"", 0, 0, { 0, 0 }, 0);
 
         const HRESULT hr = g.pRender->GetProposedFont(dpiProposed, fiDesired, fiProposed);
         // fiProposal will be updated by the renderer for this new font.
@@ -225,18 +226,15 @@ using namespace Microsoft::Console::Types;
         _UpdateSystemMetrics();
         s_ReinitializeFontsForDPIChange();
 
-        if (IsInFullscreen())
-        {
-            // If we're a full screen window, completely ignore what the DPICHANGED says as it will be bigger than the monitor and
-            // instead just ensure that the window is still taking up the full screen.
-            SetIsFullscreen(true);
-        }
-        else
-        {
-            // this is the RECT that the system suggests.
-            RECT* const prcNewScale = (RECT*)lParam;
-            SetWindowPos(hWnd, HWND_TOP, prcNewScale->left, prcNewScale->top, RECT_WIDTH(prcNewScale), RECT_HEIGHT(prcNewScale), SWP_NOZORDER | SWP_NOACTIVATE);
-        }
+        // This is the RECT that the system suggests.
+        RECT* const prcNewScale = (RECT*)lParam;
+        SetWindowPos(hWnd,
+                     HWND_TOP,
+                     prcNewScale->left,
+                     prcNewScale->top,
+                     RECT_WIDTH(prcNewScale),
+                     RECT_HEIGHT(prcNewScale),
+                     SWP_NOZORDER | SWP_NOACTIVATE);
 
         _fInDPIChange = false;
 
@@ -298,7 +296,7 @@ using namespace Microsoft::Console::Types;
         // check if we're minimized (iconic) and set our internal state flags accordingly.
         // http://msdn.microsoft.com/en-us/library/windows/desktop/dd162483(v=vs.85).aspx
         // NOTE: We will not get called to paint ourselves when minimized because we set an icon when registering the window class.
-        //       That means this CONSOLE_IS_ICONIC is unnnecessary when/if we can decouple the drawing with D2D.
+        //       That means this CONSOLE_IS_ICONIC is unnecessary when/if we can decouple the drawing with D2D.
         if (IsIconic(hWnd))
         {
             WI_SetFlag(gci.Flags, CONSOLE_IS_ICONIC);
@@ -336,13 +334,7 @@ using namespace Microsoft::Console::Types;
 
     case WM_SETTINGCHANGE:
     {
-        try
-        {
-            WindowTheme theme;
-            LOG_IF_FAILED(theme.TrySetDarkMode(hWnd));
-        }
-        CATCH_LOG();
-
+        LOG_IF_FAILED(Microsoft::Console::Internal::Theming::TrySetDarkMode(hWnd));
         gci.GetCursorBlinker().SettingsChanged();
     }
         __fallthrough;
@@ -470,7 +462,7 @@ using namespace Microsoft::Console::Types;
         // which will have a better suggested rectangle than this one.
         // NOTE: This stopped being possible in RS4 as the DPI now changes when and only when
         // we receive WM_DPICHANGED. We keep this check around so that we perform better downlevel.
-        int const dpi = ServiceLocator::LocateHighDpiApi<WindowDpiApi>()->GetWindowDPI(hWnd);
+        int const dpi = ServiceLocator::LocateHighDpiApi<WindowDpiApi>()->GetDpiForWindow(hWnd);
         if (dpi == ServiceLocator::LocateGlobals().dpi)
         {
             _HandleWindowPosChanged(lParam);
@@ -692,7 +684,10 @@ using namespace Microsoft::Console::Types;
 
     case CM_UPDATE_TITLE:
     {
-        SetWindowTextW(hWnd, gci.GetTitleAndPrefix().c_str());
+        // SetWindowTextW needs null terminated string so assign view to string.
+        const std::wstring titleAndPrefix{ gci.GetTitleAndPrefix() };
+
+        SetWindowTextW(hWnd, titleAndPrefix.c_str());
         break;
     }
 
@@ -700,7 +695,7 @@ using namespace Microsoft::Console::Types;
     {
         // Re-read the edit key settings from registry.
         Registry reg(&gci);
-        reg.GetEditKeys(NULL);
+        reg.GetEditKeys(nullptr);
         break;
     }
 

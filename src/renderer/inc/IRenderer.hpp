@@ -6,7 +6,7 @@ Module Name:
 - IRenderer.hpp
 
 Abstract:
-- This serves as the entry point for console rendering activites.
+- This serves as the entry point for console rendering activities.
 
 Author(s):
 - Michael Niksa (MiNiksa) 17-Nov-2015
@@ -39,7 +39,7 @@ namespace Microsoft::Console::Render
         virtual void TriggerRedrawCursor(const COORD* const pcoord) = 0;
 
         virtual void TriggerRedrawAll() = 0;
-        virtual void TriggerTeardown() = 0;
+        virtual void TriggerTeardown() noexcept = 0;
 
         virtual void TriggerSelection() = 0;
         virtual void TriggerScroll() = 0;
@@ -58,6 +58,7 @@ namespace Microsoft::Console::Render
 
         virtual void EnablePainting() = 0;
         virtual void WaitForPaintCompletionAndDisable(const DWORD dwTimeoutMs) = 0;
+        virtual void WaitUntilCanRender() = 0;
 
         virtual void AddRenderEngine(_In_ IRenderEngine* const pEngine) = 0;
 

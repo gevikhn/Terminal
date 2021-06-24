@@ -3,7 +3,7 @@ Copyright (c) Microsoft Corporation
 Licensed under the MIT license.
 
 Module Name:
-- userdpiapi.hpp
+- ConsoleControl.hpp
 
 Abstract:
 - This module is used for abstracting calls to private user32 DLL APIs to break the build system dependency.
@@ -13,9 +13,9 @@ Author(s):
 --*/
 #pragma once
 
-#include "..\inc\IConsoleControl.hpp"
+#include "../inc/IConsoleControl.hpp"
 
-// Uncomment to build publically targeted scenarios.
+// Uncomment to build publicly targeted scenarios.
 //#define CON_USERPRIVAPI_INDIRECT
 
 // Used by TranslateMessageEx to purposefully return false to certain WM_KEYDOWN/WM_CHAR messages

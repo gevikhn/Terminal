@@ -1,6 +1,8 @@
 DIRS=\
+     staging \
      buffer \
      interactivity \
+     dep \
      host \
      propsheet \
      propslib \
@@ -8,6 +10,7 @@ DIRS=\
      server \
      terminal \
      testlist \
+     til \
      tools \
      tsf \
      types \

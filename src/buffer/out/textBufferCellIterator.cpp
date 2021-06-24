@@ -17,7 +17,7 @@ using namespace Microsoft::Console::Types;
 // Routine Description:
 // - Creates a new read-only iterator to seek through cell data stored within a screen buffer
 // Arguments:
-// - buffer - Text buffer to seek throught
+// - buffer - Text buffer to seek through
 // - pos - Starting position to retrieve text data from (within screen buffer bounds)
 TextBufferCellIterator::TextBufferCellIterator(const TextBuffer& buffer, COORD pos) :
     TextBufferCellIterator(buffer, pos, buffer.GetSize())
@@ -65,7 +65,7 @@ TextBufferCellIterator::operator bool() const noexcept
 // - it - The other iterator to compare to this one.
 // Return Value:
 // - True if it's the same text buffer and same cell position. False otherwise.
-bool TextBufferCellIterator::operator==(const TextBufferCellIterator& it) const
+bool TextBufferCellIterator::operator==(const TextBufferCellIterator& it) const noexcept
 {
     return _pos == it._pos &&
            &_buffer == &it._buffer &&
@@ -81,7 +81,7 @@ bool TextBufferCellIterator::operator==(const TextBufferCellIterator& it) const
 // - it - The other iterator to compare to this one.
 // Return Value:
 // - True if it's the same text buffer and different cell position or if they're different buffers. False otherwise.
-bool TextBufferCellIterator::operator!=(const TextBufferCellIterator& it) const
+bool TextBufferCellIterator::operator!=(const TextBufferCellIterator& it) const noexcept
 {
     return !(*this == it);
 }

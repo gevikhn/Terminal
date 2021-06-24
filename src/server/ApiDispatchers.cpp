@@ -35,11 +35,12 @@
 {
     Telemetry::Instance().LogApiCall(Telemetry::ApiCall::GetConsoleMode);
     CONSOLE_MODE_MSG* const a = &m->u.consoleMsgL1.GetConsoleMode;
-    std::wstring handleType = L"unknown";
+    std::wstring_view handleType = L"unknown";
 
     TraceLoggingWrite(g_hConhostV2EventTraceProvider,
                       "API_GetConsoleMode",
                       TraceLoggingLevel(WINEVENT_LEVEL_VERBOSE),
+                      TraceLoggingKeyword(TIL_KEYWORD_TRACE),
                       TraceLoggingOpcode(WINEVENT_OPCODE_START));
 
     auto tracing = wil::scope_exit([&]() {
@@ -47,6 +48,7 @@
         TraceLoggingWrite(g_hConhostV2EventTraceProvider,
                           "API_GetConsoleMode",
                           TraceLoggingLevel(WINEVENT_LEVEL_VERBOSE),
+                          TraceLoggingKeyword(TIL_KEYWORD_TRACE),
                           TraceLoggingOpcode(WINEVENT_OPCODE_STOP));
     });
 
@@ -54,14 +56,14 @@
     RETURN_HR_IF_NULL(E_HANDLE, pObjectHandle);
     if (pObjectHandle->IsInputHandle())
     {
-        handleType = L"input handle";
+        handleType = L"input";
         InputBuffer* pObj;
         RETURN_IF_FAILED(pObjectHandle->GetInputBuffer(GENERIC_READ, &pObj));
         m->_pApiRoutines->GetConsoleInputModeImpl(*pObj, a->Mode);
     }
     else
     {
-        handleType = L"output handle";
+        handleType = L"output";
         SCREEN_INFORMATION* pObj;
         RETURN_IF_FAILED(pObjectHandle->GetScreenBuffer(GENERIC_READ, &pObj));
         m->_pApiRoutines->GetConsoleOutputModeImpl(*pObj, a->Mode);
@@ -192,7 +194,7 @@
     }
 
     // We must return the number of records in the message payload (to alert the client)
-    // as well as in the message headers (below in SetReplyInfomration) to alert the driver.
+    // as well as in the message headers (below in SetReplyInformation) to alert the driver.
     LOG_IF_FAILED(SizeTToULong(outEvents.size(), &a->NumRecords));
 
     size_t cbWritten;
@@ -408,6 +410,8 @@
     std::unique_ptr<IWaitRoutine> waiter;
     size_t cbRead;
 
+    const auto requiresVtQuirk{ m->GetProcessHandle()->GetShimPolicy().IsVtColorQuirkRequired() };
+
     // We have to hold onto the HR from the call and return it.
     // We can't return some other error after the actual API call.
     // This is because the write console function is allowed to write part of the string and then return an error.
@@ -418,7 +422,7 @@
         const std::wstring_view buffer(reinterpret_cast<wchar_t*>(pvBuffer), cbBufferSize / sizeof(wchar_t));
         size_t cchInputRead;
 
-        hr = m->_pApiRoutines->WriteConsoleWImpl(*pScreenInfo, buffer, cchInputRead, waiter);
+        hr = m->_pApiRoutines->WriteConsoleWImpl(*pScreenInfo, buffer, cchInputRead, requiresVtQuirk, waiter);
 
         // We must set the reply length in bytes. Convert back from characters.
         LOG_IF_FAILED(SizeTMult(cchInputRead, sizeof(wchar_t), &cbRead));
@@ -428,7 +432,7 @@
         const std::string_view buffer(reinterpret_cast<char*>(pvBuffer), cbBufferSize);
         size_t cchInputRead;
 
-        hr = m->_pApiRoutines->WriteConsoleAImpl(*pScreenInfo, buffer, cchInputRead, waiter);
+        hr = m->_pApiRoutines->WriteConsoleAImpl(*pScreenInfo, buffer, cchInputRead, requiresVtQuirk, waiter);
 
         // Reply length is already in bytes (chars), don't need to convert.
         cbRead = cchInputRead;
@@ -502,11 +506,14 @@
     case CONSOLE_REAL_UNICODE:
     case CONSOLE_FALSE_UNICODE:
     {
+        // GH#3126 if the client application is powershell.exe, then we might
+        // need to enable a compatibility shim.
         hr = m->_pApiRoutines->FillConsoleOutputCharacterWImpl(*pScreenInfo,
                                                                a->Element,
                                                                fill,
                                                                a->WriteCoord,
-                                                               amountWritten);
+                                                               amountWritten,
+                                                               m->GetProcessHandle()->GetShimPolicy().IsPowershellExe());
         break;
     }
     case CONSOLE_ASCII:
@@ -733,12 +740,15 @@
 
     if (a->Unicode)
     {
+        // GH#3126 if the client application is cmd.exe, then we might need to
+        // enable a compatibility shim.
         return m->_pApiRoutines->ScrollConsoleScreenBufferWImpl(*pObj,
                                                                 a->ScrollRectangle,
                                                                 a->DestinationOrigin,
                                                                 a->Clip ? std::optional<SMALL_RECT>(a->ClipRectangle) : std::nullopt,
                                                                 a->Fill.Char.UnicodeChar,
-                                                                a->Fill.Attributes);
+                                                                a->Fill.Attributes,
+                                                                m->GetProcessHandle()->GetShimPolicy().IsCmdExe());
     }
     else
     {
@@ -873,7 +883,7 @@
     RETURN_IF_FAILED(pObjectHandle->GetInputBuffer(GENERIC_WRITE, &pInputBuffer));
 
     size_t written;
-    std::basic_string_view<INPUT_RECORD> buffer(reinterpret_cast<INPUT_RECORD*>(pvBuffer), cbSize / sizeof(INPUT_RECORD));
+    gsl::span<const INPUT_RECORD> buffer(reinterpret_cast<INPUT_RECORD*>(pvBuffer), cbSize / sizeof(INPUT_RECORD));
     if (!a->Unicode)
     {
         RETURN_IF_FAILED(m->_pApiRoutines->WriteConsoleInputAImpl(*pInputBuffer, buffer, written, !!a->Append));
@@ -1000,7 +1010,7 @@
     }
     case CONSOLE_ATTRIBUTE:
     {
-        const std::basic_string_view<WORD> text(reinterpret_cast<WORD*>(pvBuffer), cbBufferSize / sizeof(WORD));
+        const gsl::span<const WORD> text(reinterpret_cast<WORD*>(pvBuffer), cbBufferSize / sizeof(WORD));
 
         hr = m->_pApiRoutines->WriteConsoleOutputAttributeImpl(*pScreenInfo,
                                                                text,

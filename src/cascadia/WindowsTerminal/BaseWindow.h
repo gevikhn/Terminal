@@ -3,15 +3,10 @@
 
 #pragma once
 
-#include "..\types\IConsoleWindow.hpp"
-#include "..\types\WindowUiaProviderBase.hpp"
-
 // Custom window messages
 #define CM_UPDATE_TITLE (WM_USER)
 
 #include <wil/resource.h>
-
-using namespace Microsoft::Console::Types;
 
 template<typename T>
 class BaseWindow
@@ -54,24 +49,8 @@ public:
             return HandleDpiChange(_window.get(), wparam, lparam);
         }
 
-            // TODO GitHub #2447: Properly attach WindowUiaProvider for signaling model
-            /*
-        case WM_GETOBJECT:
-        {
-            return HandleGetObject(_window.get(), wparam, lparam);
-        }
-        */
-
         case WM_DESTROY:
         {
-            // TODO GitHub #2447: Properly attach WindowUiaProvider for signaling model
-            /*
-            // signal to uia that they can disconnect our uia provider
-            if (_pUiaProvider)
-            {
-                UiaReturnRawElementProvider(hWnd, 0, 0, NULL);
-            }
-            */
             PostQuitMessage(0);
             return 0;
         }
@@ -140,22 +119,6 @@ public:
         return 0;
     }
 
-    [[nodiscard]] LRESULT HandleGetObject(const HWND hWnd, const WPARAM wParam, const LPARAM lParam)
-    {
-        LRESULT retVal = 0;
-
-        // If we are receiving a request from Microsoft UI Automation framework, then return the basic UIA COM interface.
-        if (static_cast<long>(lParam) == static_cast<long>(UiaRootObjectId))
-        {
-            retVal = UiaReturnRawElementProvider(hWnd, wParam, lParam, _GetUiaProvider());
-        }
-        // Otherwise, return 0. We don't implement MS Active Accessibility (the other framework that calls WM_GETOBJECT).
-
-        return retVal;
-    }
-
-    virtual IRawElementProviderSimple* _GetUiaProvider() = 0;
-
     virtual void OnResize(const UINT width, const UINT height) = 0;
     virtual void OnMinimize() = 0;
     virtual void OnRestore() = 0;
@@ -191,7 +154,7 @@ public:
 
     //// Gets the logical (in DIPs) size of a physical size specified by the parameter physicalSize
     //// Remarks:
-    //// XAML coordinate system is always in Display Indepenent Pixels (a.k.a DIPs or Logical). However Win32 GDI (because of legacy reasons)
+    //// XAML coordinate system is always in Display Independent Pixels (a.k.a DIPs or Logical). However Win32 GDI (because of legacy reasons)
     //// in DPI mode "Per-Monitor and Per-Monitor (V2) DPI Awareness" is always in physical pixels.
     //// The formula to transform is:
     ////     logical = (physical / dpi) + 0.5 // 0.5 is to ensure that we pixel snap correctly at the edges, this is necessary with odd DPIs like 1.25, 1.5, 1, .75
@@ -203,8 +166,8 @@ public:
         const auto scale = GetCurrentDpiScale();
         // 0.5 is to ensure that we pixel snap correctly at the edges, this is necessary with odd DPIs like 1.25, 1.5, 1, .75
         const auto logicalWidth = (physicalSize.cx / scale) + 0.5f;
-        const auto logicalHeigth = (physicalSize.cy / scale) + 0.5f;
-        return winrt::Windows::Foundation::Size(logicalWidth, logicalHeigth);
+        const auto logicalHeight = (physicalSize.cy / scale) + 0.5f;
+        return winrt::Windows::Foundation::Size(logicalWidth, logicalHeight);
     }
 
     winrt::Windows::Foundation::Size GetLogicalSize() const noexcept

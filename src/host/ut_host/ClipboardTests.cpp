@@ -8,15 +8,15 @@
 
 #include "globals.h"
 
-#include "..\interactivity\win32\Clipboard.hpp"
-#include "..\interactivity\inc\ServiceLocator.hpp"
+#include "../interactivity/win32/Clipboard.hpp"
+#include "../interactivity/inc/ServiceLocator.hpp"
 
 #include "dbcs.h"
 
 #include <cctype>
 
 #ifdef BUILD_ONECORE_INTERACTIVITY
-#include "..\..\interactivity\inc\VtApiRedirection.hpp"
+#include "../../interactivity/inc/VtApiRedirection.hpp"
 #endif
 
 #include "../../inc/consoletaeftemplates.hpp"
@@ -84,10 +84,8 @@ class ClipboardTests
         selection.emplace_back(SMALL_RECT{ 0, 2, 14, 2 });
         selection.emplace_back(SMALL_RECT{ 0, 3, 8, 3 });
 
-        return Clipboard::Instance().RetrieveTextFromBuffer(screenInfo,
-                                                            fLineSelection,
-                                                            selection)
-            .text;
+        const auto& buffer = screenInfo.GetTextBuffer();
+        return buffer.GetText(true, fLineSelection, selection).text;
     }
 
 #pragma prefast(push)
@@ -263,29 +261,36 @@ class ClipboardTests
         }
     }
 
-#ifdef __INSIDE_WINDOWS
     TEST_METHOD(CanConvertCharsRequiringAltGr)
     {
         const std::wstring wstr = L"\x20ac"; // € char U+20AC
+
+        const short keyState = VkKeyScanW(wstr[0]);
+        const WORD virtualKeyCode = LOBYTE(keyState);
+        const WORD virtualScanCode = static_cast<WORD>(MapVirtualKeyW(virtualKeyCode, MAPVK_VK_TO_VSC));
+
+        if (keyState == -1 || HIBYTE(keyState) == 0 /* no modifiers required */)
+        {
+            Log::Comment(L"This test only works on keyboard layouts where the Euro symbol exists and requires AltGr.");
+            Log::Result(WEX::Logging::TestResults::Skipped);
+            return;
+        }
+
         std::deque<std::unique_ptr<IInputEvent>> events = Clipboard::Instance().TextToKeyEvents(wstr.c_str(),
                                                                                                 wstr.size());
 
+        std::deque<KeyEvent> expectedEvents;
         // should be converted to:
         // 1. AltGr keydown
         // 2. € keydown
         // 3. € keyup
         // 4. AltGr keyup
-        const size_t convertedSize = 4;
-        VERIFY_ARE_EQUAL(convertedSize, events.size());
-
-        const short keyState = VkKeyScanW(wstr[0]);
-        const WORD virtualKeyCode = LOBYTE(keyState);
-
-        std::deque<KeyEvent> expectedEvents;
         expectedEvents.push_back({ TRUE, 1, VK_MENU, altScanCode, L'\0', (ENHANCED_KEY | LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED) });
-        expectedEvents.push_back({ TRUE, 1, virtualKeyCode, 0, wstr[0], (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED) });
-        expectedEvents.push_back({ FALSE, 1, virtualKeyCode, 0, wstr[0], (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED) });
+        expectedEvents.push_back({ TRUE, 1, virtualKeyCode, virtualScanCode, wstr[0], (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED) });
+        expectedEvents.push_back({ FALSE, 1, virtualKeyCode, virtualScanCode, wstr[0], (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED) });
         expectedEvents.push_back({ FALSE, 1, VK_MENU, altScanCode, L'\0', ENHANCED_KEY });
+
+        VERIFY_ARE_EQUAL(expectedEvents.size(), events.size());
 
         for (size_t i = 0; i < events.size(); ++i)
         {
@@ -293,7 +298,6 @@ class ClipboardTests
             VERIFY_ARE_EQUAL(expectedEvents[i], currentKeyEvent, NoThrowString().Format(L"i == %d", i));
         }
     }
-#endif
 
     TEST_METHOD(CanConvertCharsOutsideKeyboardLayout)
     {
@@ -303,23 +307,32 @@ class ClipboardTests
         std::deque<std::unique_ptr<IInputEvent>> events = Clipboard::Instance().TextToKeyEvents(wstr.c_str(),
                                                                                                 wstr.size());
 
-        // should be converted to:
-        // 1. left alt keydown
-        // 2. 1st numpad keydown
-        // 3. 1st numpad keyup
-        // 4. 2nd numpad keydown
-        // 5. 2nd numpad keyup
-        // 6. left alt keyup
-        const size_t convertedSize = 6;
-        VERIFY_ARE_EQUAL(convertedSize, events.size());
-
         std::deque<KeyEvent> expectedEvents;
-        expectedEvents.push_back({ TRUE, 1, VK_MENU, altScanCode, L'\0', LEFT_ALT_PRESSED });
-        expectedEvents.push_back({ TRUE, 1, 0x66, 0x4D, L'\0', LEFT_ALT_PRESSED });
-        expectedEvents.push_back({ FALSE, 1, 0x66, 0x4D, L'\0', LEFT_ALT_PRESSED });
-        expectedEvents.push_back({ TRUE, 1, 0x63, 0x51, L'\0', LEFT_ALT_PRESSED });
-        expectedEvents.push_back({ FALSE, 1, 0x63, 0x51, L'\0', LEFT_ALT_PRESSED });
-        expectedEvents.push_back({ FALSE, 1, VK_MENU, altScanCode, wstr[0], 0 });
+        if constexpr (Feature_UseNumpadEventsForClipboardInput::IsEnabled())
+        {
+            // Inside Windows, where numpad events are enabled, this generated numpad events.
+            // should be converted to:
+            // 1. left alt keydown
+            // 2. 1st numpad keydown
+            // 3. 1st numpad keyup
+            // 4. 2nd numpad keydown
+            // 5. 2nd numpad keyup
+            // 6. left alt keyup
+            expectedEvents.push_back({ TRUE, 1, VK_MENU, altScanCode, L'\0', LEFT_ALT_PRESSED });
+            expectedEvents.push_back({ TRUE, 1, 0x66, 0x4D, L'\0', LEFT_ALT_PRESSED });
+            expectedEvents.push_back({ FALSE, 1, 0x66, 0x4D, L'\0', LEFT_ALT_PRESSED });
+            expectedEvents.push_back({ TRUE, 1, 0x63, 0x51, L'\0', LEFT_ALT_PRESSED });
+            expectedEvents.push_back({ FALSE, 1, 0x63, 0x51, L'\0', LEFT_ALT_PRESSED });
+            expectedEvents.push_back({ FALSE, 1, VK_MENU, altScanCode, wstr[0], 0 });
+        }
+        else
+        {
+            // Outside Windows, without numpad events, we just emit the key with a nonzero UnicodeChar
+            expectedEvents.push_back({ TRUE, 1, 0, 0, wstr[0], 0 });
+            expectedEvents.push_back({ FALSE, 1, 0, 0, wstr[0], 0 });
+        }
+
+        VERIFY_ARE_EQUAL(expectedEvents.size(), events.size());
 
         for (size_t i = 0; i < events.size(); ++i)
         {

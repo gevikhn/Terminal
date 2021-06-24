@@ -59,12 +59,12 @@ public:
 
 private:
     wchar_t _ApplySensitivity(const wchar_t wch) const noexcept;
-    bool Search::_FindNeedleInHaystackAt(const COORD pos, COORD& start, COORD& end) const;
+    bool _FindNeedleInHaystackAt(const COORD pos, COORD& start, COORD& end) const;
     bool _CompareChars(const std::wstring_view one, const std::wstring_view two) const noexcept;
     void _UpdateNextPosition();
 
-    void _IncrementCoord(COORD& coord) const;
-    void _DecrementCoord(COORD& coord) const;
+    void _IncrementCoord(COORD& coord) const noexcept;
+    void _DecrementCoord(COORD& coord) const noexcept;
 
     static COORD s_GetInitialAnchor(Microsoft::Console::Types::IUiaData& uiaData, const Direction dir);
 

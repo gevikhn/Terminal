@@ -5,8 +5,8 @@
 
 #include "ConsoleWindow.hpp"
 
-#include "..\inc\ServiceLocator.hpp"
-#include "..\..\types\inc\Viewport.hpp"
+#include "../inc/ServiceLocator.hpp"
+#include "../../types/inc/Viewport.hpp"
 
 using namespace Microsoft::Console::Interactivity::OneCore;
 using namespace Microsoft::Console::Types;
@@ -135,7 +135,7 @@ void ConsoleWindow::VerticalScroll(const WORD /*wScrollCommand*/, const WORD /*w
     return E_NOTIMPL;
 }
 
-RECT ConsoleWindow::GetWindowRect() const
+RECT ConsoleWindow::GetWindowRect() const noexcept
 {
     RECT rc = { 0 };
     return rc;

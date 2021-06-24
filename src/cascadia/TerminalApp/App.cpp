@@ -6,7 +6,6 @@
 #include "App.g.cpp"
 
 using namespace winrt;
-using namespace winrt::Windows::ApplicationModel;
 using namespace winrt::Windows::ApplicationModel::Activation;
 using namespace winrt::Windows::Foundation;
 using namespace winrt::Windows::UI::Xaml;
@@ -27,6 +26,11 @@ namespace winrt::TerminalApp::implementation
         }
 
         Initialize();
+
+        // Disable XAML's automatic backplating of text when in High Contrast
+        // mode: we want full control of and responsibility for the foreground
+        // and background colors that we draw in XAML.
+        HighContrastAdjustment(::winrt::Windows::UI::Xaml::ApplicationHighContrastAdjustment::None);
     }
 
     AppLogic App::Logic()
@@ -49,8 +53,8 @@ namespace winrt::TerminalApp::implementation
             if (content == nullptr)
             {
                 auto logic = Logic();
+                logic.RunAsUwp(); // Must set UWP status first, settings might change based on it.
                 logic.LoadSettings();
-                logic.RunAsUwp();
                 logic.Create();
 
                 auto page = logic.GetRoot().as<TerminalPage>();

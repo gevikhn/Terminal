@@ -9,12 +9,13 @@
 
 #include <functional>
 
-#include "..\interactivity\inc\ServiceLocator.hpp"
+#include "../interactivity/inc/ServiceLocator.hpp"
 
 #define INPUT_BUFFER_DEFAULT_INPUT_MODE (ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT | ENABLE_ECHO_INPUT | ENABLE_MOUSE_INPUT)
 
 using Microsoft::Console::Interactivity::ServiceLocator;
 using Microsoft::Console::VirtualTerminal::TerminalInput;
+using namespace Microsoft::Console;
 
 // Routine Description:
 // - This method creates an input buffer.
@@ -25,6 +26,7 @@ using Microsoft::Console::VirtualTerminal::TerminalInput;
 InputBuffer::InputBuffer() :
     InputMode{ INPUT_BUFFER_DEFAULT_INPUT_MODE },
     WaitQueue{},
+    _pTtyConnection(nullptr),
     _termInput(std::bind(&InputBuffer::_HandleTerminalInputCallback, this, std::placeholders::_1))
 {
     // The _termInput's constructor takes a reference to this object's _HandleTerminalInputCallback.
@@ -216,6 +218,26 @@ void InputBuffer::FlushAllButKeys()
         return event->EventType() != InputEventType::KeyEvent;
     });
     _storage.erase(newEnd, _storage.end());
+}
+
+void InputBuffer::SetTerminalConnection(_In_ ITerminalOutputConnection* const pTtyConnection)
+{
+    this->_pTtyConnection = pTtyConnection;
+}
+
+void InputBuffer::PassThroughWin32MouseRequest(bool enable)
+{
+    if (_pTtyConnection)
+    {
+        if (enable)
+        {
+            LOG_IF_FAILED(_pTtyConnection->WriteTerminalW(L"\x1b[?1003;1006h"));
+        }
+        else
+        {
+            LOG_IF_FAILED(_pTtyConnection->WriteTerminalW(L"\x1b[?1003;1006l"));
+        }
+    }
 }
 
 // Routine Description:
@@ -466,6 +488,8 @@ size_t InputBuffer::Prepend(_Inout_ std::deque<std::unique_ptr<IInputEvent>>& in
 {
     try
     {
+        _vtInputShouldSuppress = true;
+        auto resetVtInputSuppress = wil::scope_exit([&]() { _vtInputShouldSuppress = false; });
         _HandleConsoleSuspensionEvents(inEvents);
         if (inEvents.empty())
         {
@@ -556,6 +580,8 @@ size_t InputBuffer::Write(_Inout_ std::deque<std::unique_ptr<IInputEvent>>& inEv
 {
     try
     {
+        _vtInputShouldSuppress = true;
+        auto resetVtInputSuppress = wil::scope_exit([&]() { _vtInputShouldSuppress = false; });
         _HandleConsoleSuspensionEvents(inEvents);
         if (inEvents.empty())
         {
@@ -716,7 +742,7 @@ bool InputBuffer::_CoalesceMouseMovedEvents(_Inout_ std::deque<std::unique_ptr<I
 }
 
 // Routine Description:
-// - checks two KeyEvents to see if they're similiar enough to be coalesced
+// - checks two KeyEvents to see if they're similar enough to be coalesced
 // Arguments:
 // - a - the first KeyEvent
 // - b - the other KeyEvent
@@ -841,8 +867,7 @@ bool InputBuffer::IsInVirtualTerminalInputMode() const
 // - Handler for inserting key sequences into the buffer when the terminal emulation layer
 //   has determined a key can be converted appropriately into a sequence of inputs
 // Arguments:
-// - rgInput - Series of input records to insert into the buffer
-// - cInput - Length of input records array
+// - inEvents - Series of input records to insert into the buffer
 // Return Value:
 // - <none>
 void InputBuffer::_HandleTerminalInputCallback(std::deque<std::unique_ptr<IInputEvent>>& inEvents)
@@ -855,6 +880,12 @@ void InputBuffer::_HandleTerminalInputCallback(std::deque<std::unique_ptr<IInput
             std::unique_ptr<IInputEvent> inEvent = std::move(inEvents.front());
             inEvents.pop_front();
             _storage.push_back(std::move(inEvent));
+        }
+
+        if (!_vtInputShouldSuppress)
+        {
+            ServiceLocator::LocateGlobals().hInputEvent.SetEvent();
+            WakeUpReadersWaitingForData();
         }
     }
     catch (...)

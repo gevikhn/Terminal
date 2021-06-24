@@ -6,7 +6,7 @@ Module Name:
 - IRenderTarget.hpp
 
 Abstract:
-- This serves as the entry point for console rendering activites.
+- This serves as the entry point for console rendering activities.
 
 Author(s):
 - Michael Niksa (MiNiksa) 17-Nov-2015
@@ -38,7 +38,7 @@ namespace Microsoft::Console::Render
         virtual void TriggerRedrawCursor(const COORD* const pcoord) = 0;
 
         virtual void TriggerRedrawAll() = 0;
-        virtual void TriggerTeardown() = 0;
+        virtual void TriggerTeardown() noexcept = 0;
 
         virtual void TriggerSelection() = 0;
         virtual void TriggerScroll() = 0;

@@ -15,57 +15,14 @@
 // Return Value:
 // - instantiated object
 // Note: will through if unable to allocate char/attribute buffers
-CharRow::CharRow(size_t rowWidth, ROW* const pParent) :
-    _wrapForced{ false },
-    _doubleBytePadded{ false },
+#pragma warning(push)
+#pragma warning(disable : 26447) // small_vector's constructor says it can throw but it should not given how we use it.  This suppresses this error for the AuditMode build.
+CharRow::CharRow(size_t rowWidth, ROW* const pParent) noexcept :
     _data(rowWidth, value_type()),
     _pParent{ FAIL_FAST_IF_NULL(pParent) }
 {
 }
-
-// Routine Description:
-// - Sets the wrap status for the current row
-// Arguments:
-// - wrapForced - True if the row ran out of space and we forced to wrap to the next row. False otherwise.
-// Return Value:
-// - <none>
-void CharRow::SetWrapForced(const bool wrapForced) noexcept
-{
-    _wrapForced = wrapForced;
-}
-
-// Routine Description:
-// - Gets the wrap status for the current row
-// Arguments:
-// - <none>
-// Return Value:
-// - True if the row ran out of space and we were forced to wrap to the next row. False otherwise.
-bool CharRow::WasWrapForced() const noexcept
-{
-    return _wrapForced;
-}
-
-// Routine Description:
-// - Sets the double byte padding for the current row
-// Arguments:
-// - fWrapWasForced - True if the row ran out of space for a double byte character and we padded out the row. False otherwise.
-// Return Value:
-// - <none>
-void CharRow::SetDoubleBytePadded(const bool doubleBytePadded) noexcept
-{
-    _doubleBytePadded = doubleBytePadded;
-}
-
-// Routine Description:
-// - Gets the double byte padding status for the current row.
-// Arguments:
-// - <none>
-// Return Value:
-// - True if the row didn't have space for a double byte character and we were padded out the row. False otherwise.
-bool CharRow::WasDoubleBytePadded() const noexcept
-{
-    return _doubleBytePadded;
-}
+#pragma warning(pop)
 
 // Routine Description:
 // - gets the size of the row, in glyph cells
@@ -90,9 +47,6 @@ void CharRow::Reset() noexcept
     {
         cell.Reset();
     }
-
-    _wrapForced = false;
-    _doubleBytePadded = false;
 }
 
 // Routine Description:
@@ -139,9 +93,9 @@ typename CharRow::const_iterator CharRow::cend() const noexcept
 // - <none>
 // Return Value:
 // - The calculated left boundary of the internal string.
-size_t CharRow::MeasureLeft() const
+size_t CharRow::MeasureLeft() const noexcept
 {
-    std::vector<value_type>::const_iterator it = _data.cbegin();
+    const_iterator it = _data.cbegin();
     while (it != _data.cend() && it->IsSpace())
     {
         ++it;
@@ -155,9 +109,9 @@ size_t CharRow::MeasureLeft() const
 // - <none>
 // Return Value:
 // - The calculated right boundary of the internal string.
-size_t CharRow::MeasureRight() const noexcept
+size_t CharRow::MeasureRight() const
 {
-    std::vector<value_type>::const_reverse_iterator it = _data.crbegin();
+    const_reverse_iterator it = _data.crbegin();
     while (it != _data.crend() && it->IsSpace())
     {
         ++it;
@@ -269,6 +223,33 @@ std::wstring CharRow::GetText() const
     return wstr;
 }
 
+// Method Description:
+// - get delimiter class for a position in the char row
+// - used for double click selection and uia word navigation
+// Arguments:
+// - column: column to get text data for
+// - wordDelimiters: the delimiters defined as a part of the DelimiterClass::DelimiterChar
+// Return Value:
+// - the delimiter class for the given char
+const DelimiterClass CharRow::DelimiterClassAt(const size_t column, const std::wstring_view wordDelimiters) const
+{
+    THROW_HR_IF(E_INVALIDARG, column >= _data.size());
+
+    const auto glyph = *GlyphAt(column).begin();
+    if (glyph <= UNICODE_SPACE)
+    {
+        return DelimiterClass::ControlChar;
+    }
+    else if (wordDelimiters.find(glyph) != std::wstring_view::npos)
+    {
+        return DelimiterClass::DelimiterChar;
+    }
+    else
+    {
+        return DelimiterClass::RegularChar;
+    }
+}
+
 UnicodeStorage& CharRow::GetUnicodeStorage() noexcept
 {
     return _pParent->GetUnicodeStorage();
@@ -294,7 +275,7 @@ COORD CharRow::GetStorageKey(const size_t column) const noexcept
 // - Updates the pointer to the parent row (which might change if we shuffle the rows around)
 // Arguments:
 // - pParent - Pointer to the parent row
-void CharRow::UpdateParent(ROW* const pParent) noexcept
+void CharRow::UpdateParent(ROW* const pParent)
 {
     _pParent = FAIL_FAST_IF_NULL(pParent);
 }

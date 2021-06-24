@@ -26,7 +26,7 @@ Revision History:
 #include "OptionsPage.h"
 #include "LayoutPage.h"
 #include "ColorsPage.h"
-#include "TerminalPage.h"
+#include "TerminalPropsheetPage.h"
 #include "ColorControl.h"
 
 //
@@ -58,6 +58,7 @@ Revision History:
 // unused 16
 #define IDS_TOOLTIP_OPACITY          17
 #define IDS_TOOLTIP_INTERCEPT_COPY_PASTE    18
+#define IDS_TERMINAL_DEF_INBOX       19
 // clang-format on
 
 void MakeAltRasterFont(

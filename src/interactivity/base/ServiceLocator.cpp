@@ -3,7 +3,7 @@
 
 #include "precomp.h"
 
-#include "..\inc\ServiceLocator.hpp"
+#include "../inc/ServiceLocator.hpp"
 
 #include "InteractivityFactory.hpp"
 
@@ -28,7 +28,7 @@ IConsoleWindow* ServiceLocator::s_consoleWindow = nullptr;
 Globals ServiceLocator::s_globals;
 
 bool ServiceLocator::s_pseudoWindowInitialized = false;
-wil::unique_hwnd ServiceLocator::s_pseudoWindow = 0;
+wil::unique_hwnd ServiceLocator::s_pseudoWindow = nullptr;
 
 #pragma endregion
 
@@ -103,6 +103,24 @@ void ServiceLocator::RundownAndExit(const HRESULT hr)
 #pragma endregion
 
 #pragma region Set Methods
+
+[[nodiscard]] NTSTATUS ServiceLocator::SetConsoleControlInstance(_In_ std::unique_ptr<IConsoleControl>&& control)
+{
+    if (s_consoleControl)
+    {
+        NT_RETURN_NTSTATUS(STATUS_INVALID_HANDLE);
+    }
+    else if (!control)
+    {
+        NT_RETURN_NTSTATUS(STATUS_INVALID_PARAMETER);
+    }
+    else
+    {
+        s_consoleControl = std::move(control);
+    }
+
+    return STATUS_SUCCESS;
+}
 
 [[nodiscard]] NTSTATUS ServiceLocator::SetConsoleWindowInstance(_In_ IConsoleWindow* window)
 {

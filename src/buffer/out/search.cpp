@@ -15,7 +15,7 @@ using namespace Microsoft::Console::Types;
 // Routine Description:
 // - Constructs a Search object.
 // - Make a Search object then call .FindNext() to locate items.
-// - Once you've found something, you can perfom actions like .Select() or .Color()
+// - Once you've found something, you can perform actions like .Select() or .Color()
 // Arguments:
 // - textBuffer - The screen text buffer to search through (the "haystack")
 // - uiaData - The IUiaData type reference, it is for providing selection methods
@@ -38,7 +38,7 @@ Search::Search(IUiaData& uiaData,
 // Routine Description:
 // - Constructs a Search object.
 // - Make a Search object then call .FindNext() to locate items.
-// - Once you've found something, you can perfom actions like .Select() or .Color()
+// - Once you've found something, you can perform actions like .Select() or .Color()
 // Arguments:
 // - textBuffer - The screen text buffer to search through (the "haystack")
 // - uiaData - The IUiaData type reference, it is for providing selection methods
@@ -97,11 +97,12 @@ bool Search::FindNext()
 // - Takes the found word and selects it in the screen buffer
 void Search::Select() const
 {
-    // Only select if we've found something.
-    if (_coordSelStart != _coordSelEnd)
-    {
-        _uiaData.SelectNewRegion(_coordSelStart, _coordSelEnd);
-    }
+    // Convert buffer selection offsets into the equivalent screen coordinates
+    // required by SelectNewRegion, taking line renditions into account.
+    const auto& textBuffer = _uiaData.GetTextBuffer();
+    const auto selStart = textBuffer.BufferToScreenPosition(_coordSelStart);
+    const auto selEnd = textBuffer.BufferToScreenPosition(_coordSelEnd);
+    _uiaData.SelectNewRegion(selStart, selEnd);
 }
 
 // Routine Description:
@@ -142,9 +143,13 @@ std::pair<COORD, COORD> Search::GetFoundLocation() const noexcept
 COORD Search::s_GetInitialAnchor(IUiaData& uiaData, const Direction direction)
 {
     const auto& textBuffer = uiaData.GetTextBuffer();
+    const COORD textBufferEndPosition = uiaData.GetTextBufferEndPosition();
     if (uiaData.IsSelectionActive())
     {
-        auto anchor = uiaData.GetSelectionAnchor();
+        // Convert the screen position of the selection anchor into an equivalent
+        // buffer position to start searching, taking line rendition into account.
+        auto anchor = textBuffer.ScreenToBufferPosition(uiaData.GetSelectionAnchor());
+
         if (direction == Direction::Forward)
         {
             textBuffer.GetSize().IncrementInBoundsCircular(anchor);
@@ -152,6 +157,10 @@ COORD Search::s_GetInitialAnchor(IUiaData& uiaData, const Direction direction)
         else
         {
             textBuffer.GetSize().DecrementInBoundsCircular(anchor);
+            // If the selection starts at (0, 0), we need to make sure
+            // it does not exceed the text buffer end position
+            anchor.X = std::min(textBufferEndPosition.X, anchor.X);
+            anchor.Y = std::min(textBufferEndPosition.Y, anchor.Y);
         }
         return anchor;
     }
@@ -163,8 +172,7 @@ COORD Search::s_GetInitialAnchor(IUiaData& uiaData, const Direction direction)
         }
         else
         {
-            const auto bufferSize = textBuffer.GetSize().Dimensions();
-            return { bufferSize.X - 1, bufferSize.Y - 1 };
+            return textBufferEndPosition;
         }
     }
 }
@@ -261,7 +269,7 @@ wchar_t Search::_ApplySensitivity(const wchar_t wch) const noexcept
 // - Helper to increment a coordinate in respect to the associated screen buffer
 // Arguments
 // - coord - Updated by function to increment one position (will wrap X and Y direction)
-void Search::_IncrementCoord(COORD& coord) const
+void Search::_IncrementCoord(COORD& coord) const noexcept
 {
     _uiaData.GetTextBuffer().GetSize().IncrementInBoundsCircular(coord);
 }
@@ -270,7 +278,7 @@ void Search::_IncrementCoord(COORD& coord) const
 // - Helper to decrement a coordinate in respect to the associated screen buffer
 // Arguments
 // - coord - Updated by function to decrement one position (will wrap X and Y direction)
-void Search::_DecrementCoord(COORD& coord) const
+void Search::_DecrementCoord(COORD& coord) const noexcept
 {
     _uiaData.GetTextBuffer().GetSize().DecrementInBoundsCircular(coord);
 }
@@ -292,6 +300,26 @@ void Search::_UpdateNextPosition()
     else
     {
         THROW_HR(E_NOTIMPL);
+    }
+
+    // To reduce wrap-around time, if the next position is larger than
+    // the end position of the written text
+    // We put the next position to:
+    // Forward: (0, 0)
+    // Backward: the position of the end of the text buffer
+    const COORD bufferEndPosition = _uiaData.GetTextBufferEndPosition();
+
+    if (_coordNext.Y > bufferEndPosition.Y ||
+        (_coordNext.Y == bufferEndPosition.Y && _coordNext.X > bufferEndPosition.X))
+    {
+        if (_direction == Direction::Forward)
+        {
+            _coordNext = { 0 };
+        }
+        else
+        {
+            _coordNext = bufferEndPosition;
+        }
     }
 }
 

@@ -35,6 +35,7 @@ public:
     bool InConptyMode() const noexcept;
     bool IsHeadless() const;
     bool ShouldCreateServerHandle() const;
+    bool ShouldRunAsComServer() const;
 
     HANDLE GetServerHandle() const;
     HANDLE GetVtInHandle() const;
@@ -43,15 +44,21 @@ public:
     bool HasSignalHandle() const;
     HANDLE GetSignalHandle() const;
 
+    std::wstring GetOriginalCommandLine() const;
     std::wstring GetClientCommandline() const;
     std::wstring GetVtMode() const;
     bool GetForceV1() const;
+    bool GetForceNoHandoff() const;
 
     short GetWidth() const;
     short GetHeight() const;
     bool GetInheritCursor() const;
+    bool IsResizeQuirkEnabled() const;
+    bool IsWin32InputModeEnabled() const;
 
-    void SetExpectedSize(COORD dimensions) noexcept;
+#ifdef UNIT_TESTING
+    void EnableConptyModeForTests();
+#endif
 
     static const std::wstring_view VT_MODE_ARG;
     static const std::wstring_view HEADLESS_ARG;
@@ -60,12 +67,16 @@ public:
     static const std::wstring_view HANDLE_PREFIX;
     static const std::wstring_view CLIENT_COMMANDLINE_ARG;
     static const std::wstring_view FORCE_V1_ARG;
+    static const std::wstring_view FORCE_NO_HANDOFF_ARG;
     static const std::wstring_view FILEPATH_LEADER_PREFIX;
     static const std::wstring_view WIDTH_ARG;
     static const std::wstring_view HEIGHT_ARG;
     static const std::wstring_view INHERIT_CURSOR_ARG;
+    static const std::wstring_view RESIZE_QUIRK;
+    static const std::wstring_view WIN32_INPUT_MODE;
     static const std::wstring_view FEATURE_ARG;
     static const std::wstring_view FEATURE_PTY_ARG;
+    static const std::wstring_view COM_SERVER_ARG;
 
 private:
 #ifdef UNIT_TESTING
@@ -78,11 +89,13 @@ private:
                      const short width,
                      const short height,
                      const bool forceV1,
+                     const bool forceNoHandoff,
                      const bool headless,
                      const bool createServerHandle,
                      const DWORD serverHandle,
                      const DWORD signalHandle,
-                     const bool inheritCursor) :
+                     const bool inheritCursor,
+                     const bool runAsComServer) :
         _commandline(commandline),
         _clientCommandline(clientCommandline),
         _vtInHandle(vtInHandle),
@@ -91,14 +104,14 @@ private:
         _width(width),
         _height(height),
         _forceV1(forceV1),
+        _forceNoHandoff(forceNoHandoff),
         _headless(headless),
         _createServerHandle(createServerHandle),
         _serverHandle(serverHandle),
         _signalHandle(signalHandle),
         _inheritCursor(inheritCursor),
-        _recievedEarlySizeChange{ false },
-        _originalWidth{ -1 },
-        _originalHeight{ -1 }
+        _resizeQuirk(false),
+        _runAsComServer{ runAsComServer }
     {
     }
 #endif
@@ -113,20 +126,20 @@ private:
 
     std::wstring _vtMode;
 
+    bool _forceNoHandoff;
     bool _forceV1;
     bool _headless;
 
     short _width;
     short _height;
 
+    bool _runAsComServer;
     bool _createServerHandle;
     DWORD _serverHandle;
     DWORD _signalHandle;
     bool _inheritCursor;
-
-    bool _recievedEarlySizeChange;
-    short _originalWidth;
-    short _originalHeight;
+    bool _resizeQuirk{ false };
+    bool _win32InputMode{ false };
 
     [[nodiscard]] HRESULT _GetClientCommandline(_Inout_ std::vector<std::wstring>& args,
                                                 const size_t index,
@@ -175,6 +188,7 @@ namespace WEX
                                                            L"Use Signal Handle: '%ws'\r\n"
                                                            L"Signal Handle: '0x%x'\r\n",
                                                            L"Inherit Cursor: '%ws'\r\n",
+                                                           L"Run As Com Server: '%ws'\r\n",
                                                            ci.GetClientCommandline().c_str(),
                                                            s_ToBoolString(ci.HasVtHandles()),
                                                            ci.GetVtInHandle(),
@@ -188,7 +202,8 @@ namespace WEX
                                                            ci.GetServerHandle(),
                                                            s_ToBoolString(ci.HasSignalHandle()),
                                                            ci.GetSignalHandle(),
-                                                           s_ToBoolString(ci.GetInheritCursor()));
+                                                           s_ToBoolString(ci.GetInheritCursor()),
+                                                           s_ToBoolString(ci.ShouldRunAsComServer()));
             }
 
         private:
